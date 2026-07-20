@@ -62,8 +62,9 @@ services:
 
   # ─── Seeder (se ejecuta una sola vez y termina) ───────────────────────────
   seeder:
-    build: ./seeder
+    build: ./back
     container_name: ien-seeder
+    command: ["node", "src/seed.js"]
     restart: "no"
     depends_on:
       backend:

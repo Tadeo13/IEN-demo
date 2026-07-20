@@ -1,4 +1,4 @@
-# IEN — Despliegue en Render
+# IEN — Despliegue en Northflank
 
 Plataforma IEN (Inteligencia Emocional).
 
@@ -8,62 +8,90 @@ Plataforma IEN (Inteligencia Emocional).
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Frontend        │────▶│  Backend API    │────▶│  MongoDB Atlas  │
 │  (Static Site)   │     │  (Docker)       │     │  (Free 512MB)   │
-│  Render Free     │     │  Render Free    │     │                 │
+│  Northflank      │     │  Northflank     │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
 | Servicio   | Plataforma     | Costo  |
 |------------|----------------|--------|
-| Frontend   | Render Static  | Gratis |
-| Backend    | Render Web     | Gratis |
+| Frontend   | Northflank Static | Gratis |
+| Backend    | Northflank Docker | Gratis |
 | MongoDB    | MongoDB Atlas  | Gratis (M0, 512MB) |
-| Seeder     | Render Shell   | Gratis |
+| Seeder     | CLI manual     | -      |
 
 ## Paso 1 — MongoDB Atlas (base de datos)
 
 1. Ir a [cloud.mongodb.com](https://cloud.mongodb.com)
 2. Crear cuenta gratuita
 3. **Build a Database** → **Shared** (M0, gratis)
-4. Elegir región más cercana
-5. Crear usuario y contraseña de base de datos
+4. Elegir region mas cercana
+5. Crear usuario y contrasena de base de datos
 6. En **Network Access** → **Add IP Address** → **Allow Access from Anywhere** (`0.0.0.0/0`)
 7. En **Database** → **Connect** → **Connect your application**
-8. Copiar la URI de conexión. Queda algo así:
+8. Copiar la URI de conexion. Queda algo asi:
    ```
-   mongodb+srv://usuario:contraseña@cluster0.xxxxx.mongodb.net/ien?retryWrites=true&w=majority
+   mongodb+srv://usuario:contrasena@cluster0.xxxxx.mongodb.net/ien?retryWrites=true&w=majority
    ```
 9. Reemplazar `xxxxxxxx` con el nombre de la DB: `/ien`
 
-## Paso 2 — Render (backend + frontend)
+## Paso 2 — Northflank (backend + frontend)
 
-1. Ir a [render.com](https://render.com) → crear cuenta con GitHub
-2. **New** → **Blueprint** → conectar repo `alex43x/ien`
-3. Render detecta el `render.yaml` y crea 2 servicios automáticamente
-4. Configurar variables de entorno en cada servicio
+1. Ir a [northflank.com](https://northflank.com) → crear cuenta con GitHub
+2. Conectar el repositorio
+3. Crear proyecto: **New Project** → nombre `ien`
 
-### Backend (ien-backend)
+### Backend (Docker Service)
 
-En el dashboard de Render → **ien-backend** → **Environment**:
+En el proyecto → **New Service** → **Deploy from GitHub**:
 
-| Variable        | Valor                                                          |
-|-----------------|----------------------------------------------------------------|
-| MONGO_URI       | `mongodb+srv://user:pass@cluster.../ien?retryWrites=true&w=majority` |
-| JWT_SECRET      | Generar con: `openssl rand -hex 32`                            |
-| CRON_API_KEY    | Generar con: `openssl rand -hex 32`                            |
-| RESEND_API_KEY  | Tu API key de [resend.com](https://resend.com)                 |
-| EMAIL_FROM      | Tu email de envío                                              |
-| FRONTEND_URL    | URL del frontend (paso siguiente)                              |
+| Campo | Valor |
+|-------|-------|
+| **Service Type** | Docker |
+| **Repository** | Tu fork/repo |
+| **Build Context** | `/back` |
+| **Dockerfile Path** | `Dockerfile` |
+| **Port** | `3000` |
+| **Health Check Path** | `/health` |
 
-### Frontend (ien-frontend)
+Variables de entorno:
 
-El frontend es un **Static Site** en Render. La URL se genera automáticamente.
+| Variable | Valor |
+|----------|-------|
+| `MONGO_URI` | URI de MongoDB Atlas |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | `openssl rand -hex 32` |
+| `CRON_API_KEY` | `openssl rand -hex 32` |
+| `RESEND_API_KEY` | API key de resend.com |
+| `EMAIL_FROM` | Tu email de envio |
+| `FRONTEND_URL` | URL del frontend (proximo paso) |
+| `PORT` | `3000` |
 
-Una vez desplegado, copiar la URL (algo como `https://ien-frontend.onrender.com`) y pegarla en `FRONTEND_URL` del backend.
+### Frontend (Static Site)
+
+En el proyecto → **New Service** → **Deploy from GitHub**:
+
+| Campo | Valor |
+|-------|-------|
+| **Service Type** | Static |
+| **Repository** | Tu fork/repo |
+| **Build Path** | `/frontend` |
+| **Build Command** | `npm ci && npm run build` |
+| **Publish Directory** | `dist` |
+
+Variables de entorno (build):
+
+| Variable | Valor |
+|----------|-------|
+| `VITE_API_URL` | `https://TU_BACKEND_URL.northflank.app/api` |
+
+La URL del backend la obtienes del dashboard de Northflank una vez desplegado.
+
+Una vez desplegado el frontend, volver al backend y actualizar `FRONTEND_URL` con la URL del frontend.
 
 ## Paso 3 — Ejecutar el Seeder
 
-1. En Render → ir al servicio **ien-backend**
-2. Pestaña **Shell** (en el menú lateral)
+1. En Northflank → ir al servicio **backend**
+2. Pestaña **Logs** o **Terminal**
 3. Ejecutar:
    ```bash
    node src/seed.js
@@ -75,14 +103,13 @@ Una vez desplegado, copiar la URL (algo como `https://ien-frontend.onrender.com`
 
 1. Abrir la URL del frontend
 2. Ir a `/login`
-3. El seeder crea un admin por defecto — verificar credenciales en `back/src/seed.js`
+3. El seeder crea un admin por defecto — credenciales en `back/src/seed.js`
 
 ## Notas importantes
 
-- **Spin-down**: El backend se duerme tras 15 min sin tráfico. Al recibir una request, tarda ~30-60s en despertar
-- **MongoDB Atlas free**: Se borra tras 30 días sin uso. Mantenerlo activo
-- **Variables de entorno**: El `render.yaml` tiene las variables marcadas como `sync: false` — hay que configurarlas manualmente en el dashboard
-- **Auto-deploy**: Cada push a `main` despliega automáticamente backend y frontend
+- **Free tier**: Northflank da 2 servicios gratis + static sites. Este proyecto usa 1 Docker (backend) + 1 Static (frontend)
+- **MongoDB Atlas free**: Se borra tras 30 dias sin uso. Mantenerlo activo
+- **Auto-deploy**: Northflank puede configurarse para desplegar automaticamente en cada push
 
 ## Testing local
 
