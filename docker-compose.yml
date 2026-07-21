@@ -48,6 +48,7 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: /api
+        BACKEND_HOST: backend
     container_name: ien-frontend
     restart: unless-stopped
     depends_on:
