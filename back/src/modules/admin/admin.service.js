@@ -6,7 +6,8 @@ const PlanProgreso = require('../../models/PlanProgreso');
 const TestPregunta = require('../../models/TestPregunta');
 const ContenidoDiario = require('../../models/ContenidoDiario');
 const AppError = require('../../utils/AppError');
-const { getInicioDeDiaDeHoy, getFechaHaceDias } = require('../../utils/fechas');
+const { getInicioDeDiaDeAyer, getInicioDeDiaDeHoy, getFechaHaceDias } = require('../../utils/fechas');
+const { enScope } = require('../../utils/scope');
 const { panelAdminPorTienda } = require('./panelAdmin');
 
 exports.panelAdminPorTienda = panelAdminPorTienda;
@@ -31,10 +32,7 @@ async function obtenerPacienteConScope(usuarioId, tiendasPermitidas) {
   if (!usuario) throw new AppError(404, 'Paciente no encontrado');
 
   if (tiendasPermitidas !== null && usuario.tienda_id) {
-    const enScope = tiendasPermitidas.some(
-      (t) => t.toString() === usuario.tienda_id._id.toString()
-    );
-    if (!enScope) throw new AppError(404, 'Paciente no encontrado');
+    if (!enScope(usuario.tienda_id._id, tiendasPermitidas)) throw new AppError(404, 'Paciente no encontrado');
   }
 
   if (usuario.tienda_id?.activo === false) {
@@ -249,7 +247,7 @@ exports.listarPacientes = async (pagina, limite, tiendasPermitidas) => {
   const ids = usuarios.map(u => u._id);
   const planes = await PlanProgreso.find({ usuario_id: { $in: ids } })
     .sort({ fecha_inicio: -1 })
-    .select('usuario_id estado dia_actual racha_dias')
+    .select('usuario_id estado dia_actual racha_dias ultima_fecha_actividad')
     .lean();
 
   const planesMap = new Map();
@@ -259,21 +257,29 @@ exports.listarPacientes = async (pagina, limite, tiendasPermitidas) => {
     }
   }
 
+  const inicioAyer = getInicioDeDiaDeAyer();
+
   return {
-    pacientes: usuarios.map(u => ({
-      id: u._id,
-      nombre: u.nombre,
-      email: u.email,
-      fecha_registro: u.fecha_registro,
-      tienda: u.tienda_id ? { id: u.tienda_id._id, nombre: u.tienda_id.nombre_tienda } : null,
-      plan: planesMap.has(u._id.toString())
-        ? {
-            estado: planesMap.get(u._id.toString()).estado,
-            dia_actual: planesMap.get(u._id.toString()).dia_actual,
-            racha_dias: planesMap.get(u._id.toString()).racha_dias
-          }
-        : null
-    })),
+    pacientes: usuarios.map(u => {
+      const plan = planesMap.get(u._id.toString());
+      return {
+        id: u._id,
+        nombre: u.nombre,
+        email: u.email,
+        fecha_registro: u.fecha_registro,
+        tienda: u.tienda_id ? { id: u.tienda_id._id, nombre: u.tienda_id.nombre_tienda } : null,
+        plan: plan
+          ? {
+              estado: plan.estado,
+              dia_actual: plan.dia_actual,
+              racha_dias: plan.racha_dias,
+              en_riesgo: plan.estado === 'activo'
+                && plan.ultima_fecha_actividad
+                && plan.ultima_fecha_actividad < inicioAyer
+            }
+          : null
+      };
+    }),
     total,
     pagina
   };
@@ -448,10 +454,7 @@ exports.getModeradorTienda = async (usuarioId, tiendasPermitidas) => {
   if (!usuario) throw new AppError(404, 'Moderador de tienda no encontrado');
 
   if (tiendasPermitidas !== null && usuario.tienda_moderada) {
-    const enScope = tiendasPermitidas.some(
-      (t) => t.toString() === usuario.tienda_moderada._id.toString()
-    );
-    if (!enScope) throw new AppError(404, 'Moderador de tienda no encontrado');
+    if (!enScope(usuario.tienda_moderada._id, tiendasPermitidas)) throw new AppError(404, 'Moderador de tienda no encontrado');
   }
 
   return usuario;
@@ -466,10 +469,7 @@ exports.actualizarModeradorTienda = async (usuarioId, { nombre, email, tienda_id
   if (!usuario) throw new AppError(404, 'Moderador de tienda no encontrado');
 
   if (tiendasPermitidas !== null && usuario.tienda_moderada) {
-    const enScope = tiendasPermitidas.some(
-      (t) => t.toString() === usuario.tienda_moderada.toString()
-    );
-    if (!enScope) throw new AppError(404, 'Moderador de tienda no encontrado');
+    if (!enScope(usuario.tienda_moderada, tiendasPermitidas)) throw new AppError(404, 'Moderador de tienda no encontrado');
   }
 
   if (email && email !== usuario.email) {
@@ -479,10 +479,7 @@ exports.actualizarModeradorTienda = async (usuarioId, { nombre, email, tienda_id
 
   if (tienda_id !== undefined) {
     if (tiendasPermitidas !== null) {
-      const enScope = tiendasPermitidas.some(
-        (t) => t.toString() === tienda_id.toString()
-      );
-      if (!enScope) throw new AppError(403, 'La tienda no está dentro de tu scope');
+      if (!enScope(tienda_id, tiendasPermitidas)) throw new AppError(403, 'La tienda no está dentro de tu scope');
     }
     const tiendaExiste = await Tienda.findOne({ _id: tienda_id, activo: true }).lean();
     if (!tiendaExiste) throw new AppError(400, 'La tienda no existe');
@@ -510,10 +507,7 @@ exports.eliminarModeradorTienda = async (usuarioId, tiendasPermitidas) => {
   if (!usuario) throw new AppError(404, 'Moderador de tienda no encontrado');
 
   if (tiendasPermitidas !== null && usuario.tienda_moderada) {
-    const enScope = tiendasPermitidas.some(
-      (t) => t.toString() === usuario.tienda_moderada.toString()
-    );
-    if (!enScope) throw new AppError(404, 'Moderador de tienda no encontrado');
+    if (!enScope(usuario.tienda_moderada, tiendasPermitidas)) throw new AppError(404, 'Moderador de tienda no encontrado');
   }
 
   await Usuario.findByIdAndDelete(usuarioId);

@@ -20,7 +20,7 @@ function generarAccessToken(usuario) {
 async function generarRefreshToken(usuarioId) {
   const token = crypto.randomBytes(40).toString('hex');
   const token_hash = crypto.createHash('sha256').update(token).digest('hex');
-  const fecha_expiracion = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const fecha_expiracion = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
   await RefreshToken.create({ usuario_id: usuarioId, token_hash, fecha_expiracion });
   return token;
 }
@@ -155,7 +155,7 @@ exports.forgotPassword = async (email) => {
     throw new AppError(400, 'Email requerido');
   }
 
-  const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   const usuario = await Usuario.findOne({ email });
 
