@@ -29,7 +29,7 @@ services:
       MONGO_URI: mongodb://mongo:27017/ien
       JWT_SECRET: ${JWT_SECRET}
       CRON_API_KEY: ${CRON_API_KEY}
-      FRONTEND_URL: http://localhost:5173
+      FRONTEND_URL: ${FRONTEND_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
     ports:
